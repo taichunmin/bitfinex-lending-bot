@@ -43,6 +43,6 @@ jobs:
           INPUT_RATE_MAX: 0.01
         run: |
           set -ex
-          yarn
+          yarn > /dev/null 2>&1
           yarn lint
           node ./bin/funding-auto-renew-1.mjs

@@ -3,7 +3,7 @@ import { getenv } from '../lib/dotenv.mjs'
 
 import _ from 'lodash'
 import { createLoggersByUrl } from '../lib/logger.mjs'
-import { rateStringify, dateStringify } from '../lib/helper.mjs'
+import { dateStringify, floatIsEqual, rateStringify } from '../lib/helper.mjs'
 import { z } from 'zod'
 import * as bitfinex from '../lib/bitfinex.mjs'
 import * as url from 'node:url'
@@ -62,9 +62,14 @@ export async function main () {
     timeframe: '1h',
   })
 
-  // 從 FRR 及最近的 N 根 K 棒的 high 中，取最大的 10 筆資料計算平均值。
-  const rateTarget = _.chain(candles).map('high').thru(rates => [...rates, fundingStats.frr]).sortBy().takeRight(10).sum().thru(rate => rate / 10).clamp(cfg.rateMin, cfg.rateMax).value()
+  // 從 FRR 及最近的 N 根 K 棒的 high 中，取前 2 高到前 11 高的資料計算平均值（忽略最高）。
+  const rateTarget = _.chain(candles).map('high').thru(rates => [...rates, fundingStats.frr]).sortBy().slice(-11, -1).sum().thru(rate => rate / 10).clamp(cfg.rateMin, cfg.rateMax).value()
   loggers.log(_.set({}, 'rateTarget', rateStringify(rateTarget)))
+
+  if (floatIsEqual(rateTarget, autoFunding?.rate ?? 0) && _.isEqual(_.pick(cfg, ['amount', 'period']), _.pick(autoFunding, ['amount', 'period']))) {
+    loggers.log('No need to update auto-renew setting.')
+    return
+  }
 
   if (autoFunding) await bitfinex.submitAutoFunding({ ..._.pick(cfg, ['currency']), status: 0 })
   await bitfinex.cancelAllFundingOffers(cfg.currency)
