@@ -6,6 +6,7 @@ import { createLoggersByUrl } from '../lib/logger.mjs'
 import { dateStringify, floatIsEqual, rateStringify } from '../lib/helper.mjs'
 import { z } from 'zod'
 import * as bitfinex from '../lib/bitfinex.mjs'
+import * as telegram from '../lib/telegram.mjs'
 import * as url from 'node:url'
 
 const loggers = createLoggersByUrl(import.meta.url)
@@ -67,7 +68,7 @@ export async function main () {
   loggers.log(_.set({}, 'rateTarget', rateStringify(rateTarget)))
 
   if (floatIsEqual(rateTarget, autoFunding?.rate ?? 0) && _.isEqual(_.pick(cfg, ['amount', 'period']), _.pick(autoFunding, ['amount', 'period']))) {
-    loggers.log('No need to update auto-renew setting.')
+    loggers.log('Setting of auto-renew no change.')
     return
   }
 
@@ -78,6 +79,8 @@ export async function main () {
     rate: rateTarget * 100, // percentage of rate
     status: 1,
   })
+  await telegram.sendMessage({ text: `funding-auto-renew-1:\nRate of auto-renew changed to ${rateStringify(rateTarget)}` })
+    .catch(err => loggers.error(err))
 }
 
 class NotMainModuleError extends Error {}

@@ -7,6 +7,12 @@ on:
     # 避開整點時間，因為有可能會有時間上的延誤
     - cron: '6-56/10 * * * *'
 
+env:
+  BITFINEX_API_KEY: ${{ secrets.BITFINEX_API_KEY }}
+  BITFINEX_API_SECRET: ${{ secrets.BITFINEX_API_SECRET }}
+  TELEGRAM_CHAT_ID: '-4119951617'
+  TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+
 jobs:
   bitfinex:
     # 避免被 fork 的 repository 觸發，請改成自己的 GitHub 帳號
@@ -34,8 +40,6 @@ jobs:
           cache: 'yarn'
       - name: Install dependencies, eslint, and run
         env:
-          BITFINEX_API_KEY: ${{ secrets.BITFINEX_API_KEY }}
-          BITFINEX_API_SECRET: ${{ secrets.BITFINEX_API_SECRET }}
           INPUT_AMOUNT: 0
           INPUT_CURRENCY: USD
           INPUT_PERIOD: 2
