@@ -43,7 +43,7 @@ jobs:
           INPUT_AMOUNT: 0
           INPUT_CURRENCY: USD
           INPUT_PERIOD: 2
-          INPUT_RATE_MIN: 0.0002
+          INPUT_RATE_MIN: 0.0001
           INPUT_RATE_MAX: 0.01
         run: |
           set -ex
