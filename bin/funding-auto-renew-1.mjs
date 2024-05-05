@@ -33,7 +33,10 @@ export async function main () {
     rateMin: rateStringify(cfg.rateMin),
     rateMax: rateStringify(cfg.rateMax),
   }))
-  if (!await bitfinex.status()) throw new Error('Bitfinex API is in maintenance mode')
+  if (!await bitfinex.status()) {
+    loggers.error('Bitfinex API is in maintenance mode')
+    return
+  }
 
   const fundingStats = _.first(await bitfinex.getFundingStats({ limit: 1, symbol: `f${cfg.currency}` }))
   loggers.log(_.set({}, 'fundingStats', {
@@ -60,7 +63,7 @@ export async function main () {
     section: 'hist',
     sort: -1,
     symbol: `f${cfg.currency}:p2`,
-    timeframe: '1h',
+    timeframe: '30m',
   })
 
   // 從 FRR 及最近的 N 根 K 棒的 high 中，取前 2 高到前 11 高的資料計算平均值（忽略最高）。
