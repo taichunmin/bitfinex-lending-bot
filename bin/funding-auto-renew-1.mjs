@@ -73,7 +73,7 @@ export async function main () {
     limit: 25,
     section: 'hist',
     sort: -1,
-    symbol: `f${cfg.currency}:p2`,
+    symbol: `f${cfg.currency}:a30:p2:p30`,
     timeframe: '30m',
   })
 
