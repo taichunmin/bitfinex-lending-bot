@@ -1,4 +1,4 @@
-name: 'taichunmin auto-renew-1: fUSD'
+name: 'taichunmin auto-renew-1: fUST'
 
 on:
   workflow_dispatch:
@@ -18,7 +18,7 @@ jobs:
     # 避免被 fork 的 repository 觸發，請改成自己的 GitHub 帳號
     if: github.repository_owner == 'taichunmin'
     # 這個名字必須跟 repo 的 Environments 名稱一樣
-    environment: taichunmin-usd-1
+    environment: taichunmin-usdt-1
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -47,7 +47,7 @@ jobs:
           # https://api-pub.bitfinex.com/v2/conf/pub:list:currency:margin
           # https://api-pub.bitfinex.com/v2/conf/pub:map:currency:sym
           # https://api-pub.bitfinex.com/v2/conf/pub:map:currency:label
-          INPUT_CURRENCY: USD
+          INPUT_CURRENCY: UST
           INPUT_RATE_MIN: 0.0001
           INPUT_RATE_MAX: 0.01
           # https://docs.google.com/spreadsheets/d/1eJSlFDx5iFM_rMM9mFiPO16x1VhyDReAOeCyLT-bdRA/edit#gid=1058478097
