@@ -1,4 +1,4 @@
-name: 'taichunmin auto-renew-1: fUSD'
+name: 'taichunmin auto-renew-2: fUSD'
 
 on:
   workflow_dispatch:
@@ -48,8 +48,9 @@ jobs:
           # https://api-pub.bitfinex.com/v2/conf/pub:map:currency:sym
           # https://api-pub.bitfinex.com/v2/conf/pub:map:currency:label
           INPUT_CURRENCY: USD
-          INPUT_RATE_MIN: 0.0001
+          INPUT_RANK: 0.85
           INPUT_RATE_MAX: 0.01
+          INPUT_RATE_MIN: 0.0001
           # https://docs.google.com/spreadsheets/d/1eJSlFDx5iFM_rMM9mFiPO16x1VhyDReAOeCyLT-bdRA/edit#gid=1058478097
           INPUT_PERIOD: |
             {
@@ -86,4 +87,4 @@ jobs:
           set -ex
           yarn > /dev/null 2>&1
           yarn lint
-          node ./bin/funding-auto-renew-1.mjs
+          yarn tsx ./bin/funding-auto-renew-2.ts
