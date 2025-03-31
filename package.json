@@ -7,16 +7,16 @@
   "type": "module",
   "version": "0.1.0",
   "dependencies": {
-    "@taichunmin/bitfinex": "^0.0.4",
-    "bitfinex-api-node": "^6.0.0",
-    "dayjs": "^1.11.10",
-    "debug": "^4.3.4",
-    "dotenv": "^16.4.5",
+    "@taichunmin/bitfinex": "^0.0.7",
+    "bitfinex-api-node": "^7.0.0",
+    "dayjs": "^1.11.13",
+    "debug": "^4.4.0",
+    "dotenv": "^16.4.7",
     "js-yaml": "^4.1.0",
     "json5": "^2.2.3",
     "lodash": "^4.17.21",
     "technicalindicators": "^3.1.0",
-    "zod": "^3.22.4"
+    "zod": "^3.24.2"
   },
   "devDependencies": {
     "@types/lodash": "^4.17.16",

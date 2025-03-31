@@ -48,7 +48,7 @@ jobs:
           # https://api-pub.bitfinex.com/v2/conf/pub:map:currency:sym
           # https://api-pub.bitfinex.com/v2/conf/pub:map:currency:label
           INPUT_CURRENCY: UST
-          INPUT_RANK: 0.85
+          INPUT_RANK: 0.8
           INPUT_RATE_MAX: 0.01
           INPUT_RATE_MIN: 0.0001
           # https://docs.google.com/spreadsheets/d/1eJSlFDx5iFM_rMM9mFiPO16x1VhyDReAOeCyLT-bdRA/edit#gid=1058478097

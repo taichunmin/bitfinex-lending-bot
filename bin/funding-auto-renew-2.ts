@@ -7,19 +7,18 @@ yarn tsx ./bin/funding-auto-renew-2.ts
 3. 利用二分搜尋法，找出最接近 totalVolume * rank 的利率
 */
 
-
 // import first before other imports
 import { getenv } from '../lib/dotenv.mjs'
 
-import _ from 'lodash'
-import { createLoggersByUrl } from '../lib/logger.mjs'
-import { dateStringify, floatIsEqual, rateStringify } from '../lib/helper.mjs'
-import { z } from 'zod'
-import * as telegram from '../lib/telegram.mjs'
-import * as url from 'node:url'
-import JSON5 from 'json5'
 import { Bitfinex, BitfinexSort, PlatformStatus } from '@taichunmin/bitfinex'
+import JSON5 from 'json5'
+import _ from 'lodash'
+import * as url from 'node:url'
+import { z } from 'zod'
 import { dayjs } from '../lib/dayjs.mjs'
+import { dateStringify, floatFormatDecimal, floatIsEqual, rateStringify } from '../lib/helper.mjs'
+import { createLoggersByUrl } from '../lib/logger.mjs'
+import * as telegram from '../lib/telegram.mjs'
 
 const loggers = createLoggersByUrl(import.meta.url)
 const RATE_MIN = 0.0001 // APR 3.65%
@@ -89,13 +88,12 @@ export async function main (): Promise<void> {
   }
 
   // get candles
-  const candles = await Bitfinex.v2Candles({
+  const candles = await Bitfinex.v2CandlesHist({
     aggregation: 30,
     currency: cfg.currency,
     limit: 1441, // 1 day + 1 min
     periodEnd: 30,
     periodStart: 2,
-    section: 'hist',
     sort: BitfinexSort.DESC,
     timeframe: '1m',
   })
@@ -199,8 +197,14 @@ export async function main (): Promise<void> {
     rate: target.rate * 100, // percentage of rate
     status: 1,
   }).catch(err => { throw _.merge(err, { data: { target } }) })
+
+  // 取得掛單並計算掛單中的總金額
+  const orders = await bitfinex.v2AuthReadFundingOffers({ currency: cfg.currency })
+  const orderAmount = floatFormatDecimal(_.sumBy(orders, 'amount') ?? 0, 8)
+  loggers.log({ orders, orderAmount })
+
   await telegram.sendMessage({
-    text: `funding-auto-renew-2:\n以 ${rateStringify(target.rate)} 利率自動借出 ${cfg.currency}，最多 ${target.period} 天`,
+    text: `funding-auto-renew-2:\n以 ${rateStringify(target.rate)} 利率自動借出 ${orderAmount} ${cfg.currency}，最多 ${target.period} 天`,
   }).catch(err => loggers.error(err))
 }
 
