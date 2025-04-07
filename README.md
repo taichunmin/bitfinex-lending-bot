@@ -9,6 +9,7 @@
 
 | Repo | Stars | Forks |
 | ---- | ----- | ----- |
+| [taichunmin/js-bitfinex](https://github.com/taichunmin/js-bitfinex) | ![](https://img.shields.io/github/stars/taichunmin/js-bitfinex?style=flat) | ![](https://img.shields.io/github/forks/taichunmin/js-bitfinex?style=flat) |
 | [anandanand84/technicalindicators](https://github.com/anandanand84/technicalindicators) | ![](https://img.shields.io/github/stars/anandanand84/technicalindicators?style=flat) | ![](https://img.shields.io/github/forks/anandanand84/technicalindicators?style=flat) |
 | [BitBotFactory/MikaLendingBot](https://github.com/BitBotFactory/MikaLendingBot) | ![](https://img.shields.io/github/stars/BitBotFactory/MikaLendingBot?style=flat) | ![](https://img.shields.io/github/forks/BitBotFactory/MikaLendingBot?style=flat) |
 | [eAndrius/BitfinexLendingBot](https://github.com/eAndrius/BitfinexLendingBot) | ![](https://img.shields.io/github/stars/eAndrius/BitfinexLendingBot?style=flat) | ![](https://img.shields.io/github/forks/eAndrius/BitfinexLendingBot?style=flat) |

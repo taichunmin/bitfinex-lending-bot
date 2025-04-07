@@ -13,6 +13,7 @@ import { getenv } from '../lib/dotenv.mjs'
 import { Bitfinex, BitfinexSort, PlatformStatus } from '@taichunmin/bitfinex'
 import JSON5 from 'json5'
 import _ from 'lodash'
+import { scheduler } from 'node:timers/promises'
 import * as url from 'node:url'
 import { z } from 'zod'
 import { dayjs } from '../lib/dayjs.mjs'
@@ -21,6 +22,7 @@ import { createLoggersByUrl } from '../lib/logger.mjs'
 import * as telegram from '../lib/telegram.mjs'
 
 const loggers = createLoggersByUrl(import.meta.url)
+const filename = new URL(import.meta.url).pathname.replace(/^.*?([^/\\]+)\.[^.]+$/, '$1')
 const RATE_MIN = 0.0001 // APR 3.65%
 const bitfinex = new Bitfinex({
   apiKey: getenv('BITFINEX_API_KEY'),
@@ -199,12 +201,13 @@ export async function main (): Promise<void> {
   }).catch(err => { throw _.merge(err, { data: { target } }) })
 
   // 取得掛單並計算掛單中的總金額
+  await scheduler.wait(1000) // 等待 1 秒鐘，讓掛單生效
   const orders = await bitfinex.v2AuthReadFundingOffers({ currency: cfg.currency })
   const orderAmount = floatFormatDecimal(_.sumBy(orders, 'amount') ?? 0, 8)
   loggers.log({ orders, orderAmount })
 
   await telegram.sendMessage({
-    text: `funding-auto-renew-2:\n以 ${rateStringify(target.rate)} 利率自動借出 ${orderAmount} ${cfg.currency}，最多 ${target.period} 天`,
+    text: `${filename}:\n以 ${rateStringify(target.rate)} 利率自動借出 ${orderAmount} ${cfg.currency}，最多 ${target.period} 天`,
   }).catch(err => loggers.error(err))
 }
 

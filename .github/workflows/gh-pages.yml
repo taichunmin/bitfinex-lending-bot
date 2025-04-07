@@ -1,0 +1,57 @@
+name: GitHub Pages
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master ]
+  schedule:
+    # timezone: UTC
+    # 避開整點時間，因為有可能會有時間上的延誤
+    - cron: '45 0-3 * * *'
+
+env:
+  BITFINEX_API_KEY: ${{ secrets.BITFINEX_API_KEY }}
+  BITFINEX_API_SECRET: ${{ secrets.BITFINEX_API_SECRET }}
+  TELEGRAM_CHAT_ID: '-4119951617'
+  TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Dump GitHub Context
+        run: |
+          echo 'env=${{ toJSON(env) }}'
+          echo 'github=${{ toJSON(github) }}'
+          echo 'inputs=${{ toJSON(inputs) }}'
+          echo 'job=${{ toJSON(job) }}'
+          echo 'runner=${{ toJSON(runner) }}'
+          echo 'secrets=${{ toJSON(secrets) }}'
+          echo 'steps=${{ toJSON(steps) }}'
+          echo 'vars=${{ toJSON(vars) }}'
+      - uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'yarn'
+      - name: install and build
+        run: |
+          set -ex
+          yarn
+          INPUT_CURRENCYS=USD,UST yarn tsx ./bin/funding-statistics-1.ts
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './dist'
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
