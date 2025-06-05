@@ -206,9 +206,11 @@ export async function main (): Promise<void> {
   const orderAmount = floatFormatDecimal(_.sumBy(orders, 'amount') ?? 0, 8)
   loggers.log({ orders, orderAmount })
 
-  await telegram.sendMessage({
-    text: `${filename}:\n以 ${rateStringify(target.rate)} 利率自動借出 ${orderAmount} ${cfg.currency}，最多 ${target.period} 天`,
-  }).catch(err => loggers.error(err))
+  if (orderAmount !== '0.00000000') {
+    await telegram.sendMessage({
+      text: `${filename}:\n以 ${rateStringify(target.rate)} 利率自動借出 ${orderAmount} ${cfg.currency}，最多 ${target.period} 天`,
+    }).catch(loggers.error)
+  }
 }
 
 export function rateToPeriod (periodMap: z.output<typeof ZodConfig>['period'], rateTarget) {
