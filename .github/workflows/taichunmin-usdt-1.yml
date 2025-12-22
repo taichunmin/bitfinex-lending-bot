@@ -38,13 +38,12 @@ jobs:
               "vars": ${{ toJSON(vars) }}
             }
         run: echo "$ACTION_CONTEXT" | jq .
-      - uses: actions/checkout@v4
       - uses: liskin/gh-workflow-keepalive@v1
-      - name: Install Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: lts/*
           cache: 'yarn'
+          node-version: lts/*
       - name: Install dependencies, eslint, and run
         env:
           INPUT_AMOUNT: 0

@@ -1,0 +1,17 @@
+{
+  "extends": "@tsconfig/node-lts/tsconfig.json",
+  "include": ["**/*.js", "**/*.cjs", "**/*.mjs", "**/*.ts"],
+  "exclude": ["dist/**/*", "node_modules/**/*", "**/*.d.ts"],
+  "compilerOptions": {
+    "forceConsistentCasingInFileNames": true,
+    "lib": ["es2023"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "outDir": "./dist",
+    "rewriteRelativeImportExtensions": true,
+    "useUnknownInCatchVariables": false,
+    "paths": {
+      "@/*": ["./*"]
+    }
+  }
+}

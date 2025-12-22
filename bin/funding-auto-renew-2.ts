@@ -8,18 +8,17 @@ yarn tsx ./bin/funding-auto-renew-2.ts
 */
 
 // import first before other imports
-import { getenv } from '../lib/dotenv.mjs'
+import { getenv } from '@/lib/dotenv'
 
+import { dayjs } from '@/lib/dayjs'
+import { dateStringify, floatFormatDecimal, floatIsEqual, json5parseOrDefault, rateStringify } from '@/lib/helper'
+import { createLoggersByUrl } from '@/lib/logger'
+import * as telegram from '@/lib/telegram'
 import { Bitfinex, BitfinexSort, PlatformStatus } from '@taichunmin/bitfinex'
-import JSON5 from 'json5'
 import _ from 'lodash'
 import { scheduler } from 'node:timers/promises'
 import * as url from 'node:url'
 import { z } from 'zod'
-import { dayjs } from '../lib/dayjs.mjs'
-import { dateStringify, floatFormatDecimal, floatIsEqual, rateStringify } from '../lib/helper.mjs'
-import { createLoggersByUrl } from '../lib/logger.mjs'
-import * as telegram from '../lib/telegram.mjs'
 
 const loggers = createLoggersByUrl(import.meta.url)
 const filename = new URL(import.meta.url).pathname.replace(/^.*?([^/\\]+)\.[^.]+$/, '$1')
@@ -42,20 +41,27 @@ function bigintAbs (a: bigint): bigint {
   return a < 0n ? -a : a
 }
 
+const coercedObj = <T extends z.ZodType>(zodType: T) =>  // parse json5 string to object
+   z.preprocess((val: string) => json5parseOrDefault(val, val), zodType)
+
 const ZodConfig = z.object({
   amount: z.coerce.number().min(0).default(0),
   currency: z.coerce.string().default('USD'),
-  period: z.record(z.coerce.number().int().min(2).max(120), z.number().positive()).default({}),
   rank: z.coerce.number().min(0).max(1).default(0.5),
   rateMax: z.coerce.number().min(RATE_MIN).default(0.01),
   rateMin: z.coerce.number().min(RATE_MIN).default(0.0002),
+  period: coercedObj(z.record(
+    z.templateLiteral([z.number().int().min(2).max(120)]),
+    z.number().positive(),
+  ).default({})),
 })
 
 export async function main (): Promise<void> {
+  // 讀取並驗證設定
   const cfg = ZodConfig.parse({
     amount: getenv('INPUT_AMOUNT'),
     currency: getenv('INPUT_CURRENCY'),
-    period: JSON5.parse(getenv('INPUT_PERIOD')),
+    period: getenv('INPUT_PERIOD'),
     rank: getenv('INPUT_RANK'),
     rateMax: getenv('INPUT_RATE_MAX'),
     rateMin: getenv('INPUT_RATE_MIN'),
@@ -70,14 +76,15 @@ export async function main (): Promise<void> {
     return
   }
 
-  const fundingStats = (await Bitfinex.v2FundingStatsHist({ currency: cfg.currency, limit: 1 }))?.[0]
+  // 取得該貨幣最新一筆融資統計
+  const fundingStats = (await Bitfinex.v2FundingStatsHist({ currency: cfg.currency, limit: 1 }))[0]
   ymlDump('fundingStats', {
     currency: cfg.currency,
     date: dateStringify(fundingStats.mts),
     frr: rateStringify(fundingStats.frr),
   })
 
-  // get status of auto funding
+  // 取得該貨幣自動出借的設定
   const autoFunding = await bitfinex.v2AuthReadFundingAutoStatus({ currency: cfg.currency })
   if (_.isNil(autoFunding)) loggers.log({ autoRenew: { status: false } })
   else {
@@ -103,27 +110,23 @@ export async function main (): Promise<void> {
   // ranges
   const yesterday = dayjs().add(-1, 'day').add(-1, 'second').toDate()
   const ranges = _.chain(candles)
-    .filter(candle => candle.mts >= yesterday && candle.volume > 0)
-    .map(candle => {
-      const [open, close, high, low, volume] = _.chain(candle)
-        .pick(['open', 'close', 'high', 'low', 'volume'])
-        .map(num => BigInt(_.round(num * 1e8)))
-        .value()
+    .filter(candle => candle.mts >= yesterday)
+    .map(({ open, close, high, low, volume }) => {
+      const numToBigInt8 = (num: number) => BigInt(_.round(num * 1e8))
       return [
-        _.min([open, close, high, low]), // min * 1e8
-        _.max([open, close, high, low]), // high * 1e8
-        volume, // volume
-      ] as [bigint, bigint, bigint]
+        numToBigInt8(_.min([open, close, high, low])), // min * 1e8
+        numToBigInt8(_.max([open, close, high, low])), // high * 1e8
+        numToBigInt8(volume), // volume * 1e8
+      ]
     })
+    .filter(([low, high, volume]) => volume > 0n)
     .sortBy([0, 1, 2])
     .value()
   // sum duplicate ranges
   for (let i = 1; i < ranges.length; i++) {
     const [low, high, volume] = ranges[i]
-    if (volume > 0n) {
-      if (low !== ranges[i - 1][0] || high !== ranges[i - 1][1]) continue
-      ranges[i - 1][2] += volume
-    }
+    if (low !== ranges[i - 1][0] || high !== ranges[i - 1][1]) continue
+    ranges[i - 1][2] += volume
     ranges.splice(i, 1)
     i--
   }
@@ -191,7 +194,7 @@ export async function main (): Promise<void> {
     return
   }
 
-  if (autoFunding) await bitfinex.v2AuthWriteFundingAuto({ ..._.pick(cfg, ['currency']), status: 0 })
+  if (!_.isNil(autoFunding)) await bitfinex.v2AuthWriteFundingAuto({ ..._.pick(cfg, ['currency']), status: 0 })
   await bitfinex.v2AuthWriteFundingOfferCancelAll(_.pick(cfg, ['currency']))
   await bitfinex.v2AuthWriteFundingAuto({
     ..._.pick(cfg, ['currency', 'amount']),
@@ -203,7 +206,7 @@ export async function main (): Promise<void> {
   // 取得掛單並計算掛單中的總金額
   await scheduler.wait(1000) // 等待 1 秒鐘，讓掛單生效
   const orders = await bitfinex.v2AuthReadFundingOffers({ currency: cfg.currency })
-  const orderAmount = floatFormatDecimal(_.sumBy(orders, 'amount') ?? 0, 8)
+  const orderAmount = floatFormatDecimal(_.sumBy(orders, 'amount'), 8)
   loggers.log({ orders, orderAmount })
 
   if (orderAmount !== '0.00000000') {
@@ -213,7 +216,7 @@ export async function main (): Promise<void> {
   }
 }
 
-export function rateToPeriod (periodMap: z.output<typeof ZodConfig>['period'], rateTarget) {
+export function rateToPeriod (periodMap: z.output<typeof ZodConfig>['period'], rateTarget: number): number {
   const sortedPeriods = _.chain(periodMap)
     .map((v, k) => ({ peroid: _.toSafeInteger(k), rate: _.toFinite(v) }))
     .orderBy(['peroid'], ['desc'])

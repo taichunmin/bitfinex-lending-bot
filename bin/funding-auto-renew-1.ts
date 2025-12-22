@@ -1,34 +1,30 @@
 // import first before other imports
-import { getenv } from '../lib/dotenv.mjs'
+import { getenv } from '@/lib/dotenv'
 
+import * as bitfinex from '@/lib/bitfinex'
+import { dateStringify, floatIsEqual, json5parseOrDefault, rateStringify } from '@/lib/helper'
+import { createLoggersByUrl } from '@/lib/logger'
+import * as telegram from '@/lib/telegram'
+import { z } from '@/lib/zod'
 import _ from 'lodash'
-import { createLoggersByUrl } from '../lib/logger.mjs'
-import { dateStringify, floatIsEqual, rateStringify } from '../lib/helper.mjs'
-import { z } from 'zod'
-import * as bitfinex from '../lib/bitfinex.mjs'
-import * as telegram from '../lib/telegram.mjs'
 import * as url from 'node:url'
-import JSON5 from 'json5'
 
 const loggers = createLoggersByUrl(import.meta.url)
 const RATE_MIN = 0.0001 // APR 3.65%
 
-const ZodJson5CastObj = zodType => { // parse json5 string to object
-  return z.preprocess(val => {
-    try {
-      return JSON5.parse(val)
-    } catch (err) {
-      return val
-    }
-  }, zodType)
-}
+const coercedObj = <T extends z.ZodType>(zodType: T) =>  // parse json5 string to object
+   z.preprocess((val: string) => json5parseOrDefault(val, val), zodType)
+
 
 const ZodConfig = z.object({
   amount: z.coerce.number().min(0).default(0),
   currency: z.coerce.string().default('USD'),
   rateMax: z.coerce.number().min(RATE_MIN).default(0.01),
   rateMin: z.coerce.number().min(RATE_MIN).default(0.0002),
-  period: ZodJson5CastObj(z.record(z.coerce.number().int().min(2).max(120), z.number().positive()).default({})),
+  period: coercedObj(z.record(
+    z.templateLiteral([z.number().int().min(2).max(120)]),
+    z.number().positive(),
+  ).default({})),
 })
 
 export async function main () {
@@ -50,11 +46,11 @@ export async function main () {
   }
 
   const fundingStats = _.first(await bitfinex.getFundingStats({ limit: 1, symbol: `f${cfg.currency}` }))
-  loggers.log(_.set({}, 'fundingStats', {
+  if (!_.isNil(fundingStats)) {loggers.log(_.set({}, 'fundingStats', {
     currency: cfg.currency,
     date: dateStringify(fundingStats.mts),
     frr: rateStringify(fundingStats.frr),
-  }))
+  }))}
 
   // get status of auto funding
   const autoFunding = await bitfinex.getAutoFunding({ currency: cfg.currency })
@@ -78,20 +74,20 @@ export async function main () {
   })
 
   // 從 FRR 及最近的 N 根 K 棒的 high 中，取前 2 高到前 11 高的資料計算平均值（忽略最高）。
-  const target = { amount: cfg.amount }
-  target.rate = _.chain(candles).map('high').thru(rates => [...rates, fundingStats.frr]).sortBy().slice(-11, -1).sum().thru(rate => rate / 10).clamp(cfg.rateMin, cfg.rateMax).value()
+  const target: Record<string, any> = { amount: cfg.amount }
+  target.rate = _.chain(candles).map('high').thru(rates => [...rates, fundingStats?.frr]).sortBy().slice(-11, -1).sum().thru(rate => rate / 10).clamp(cfg.rateMin, cfg.rateMax).value()
   target.period = rateToPeriod(cfg.period, target.rate)
   loggers.log(_.set({}, 'target', {
     ...target,
     rate: rateStringify(target.rate),
   }))
 
-  if (_.isMatchWith(autoFunding, target, floatIsEqual)) {
+  if (_.isMatchWith(autoFunding ?? {}, target, floatIsEqual)) {
     loggers.log('Setting of auto-renew no change.')
     return
   }
 
-  if (autoFunding) await bitfinex.submitAutoFunding({ ..._.pick(cfg, ['currency']), status: 0 })
+  if (!_.isNil(autoFunding)) await bitfinex.submitAutoFunding({ ..._.pick(cfg, ['currency']), status: 0 })
   await bitfinex.cancelAllFundingOffers(cfg.currency)
   await bitfinex.submitAutoFunding({
     ..._.pick(cfg, ['currency', 'amount']),
@@ -101,10 +97,10 @@ export async function main () {
   }).catch(err => { throw _.merge(err, { data: { target } }) })
   await telegram.sendMessage({
     text: `funding-auto-renew-1:\n以 ${rateStringify(target.rate)} 利率自動借出 ${cfg.currency}，最多 ${target.period} 天`,
-  }).catch(err => loggers.error(err))
+  }).catch(err => { loggers.error(err); })
 }
 
-export function rateToPeriod (periodMap, rateTarget) {
+export function rateToPeriod (periodMap: Record<string, number>, rateTarget: number): number {
   const sortedPeriods = _.chain(periodMap)
     .map((v, k) => ({ peroid: _.toSafeInteger(k), rate: _.toFinite(v) }))
     .orderBy(['peroid'], ['desc'])

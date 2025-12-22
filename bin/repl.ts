@@ -1,10 +1,10 @@
 // import first before other imports
-import { getenv } from '../lib/dotenv.mjs'
+import { getenv } from '@/lib/dotenv'
 
 import _ from 'lodash'
-import { createLoggersByUrl } from '../lib/logger.mjs'
-import * as bitfinex from '../lib/bitfinex.mjs'
-import Repl from 'repl'
+import { createLoggersByUrl } from '@/lib/logger'
+import * as bitfinex from '@/lib/bitfinex'
+import Repl from 'node:repl'
 
 const loggers = createLoggersByUrl(import.meta.url)
 
@@ -14,7 +14,7 @@ const repl = Repl.start({
   prompt: `${getenv('NODE_ENV', 'dev')}> `,
   useGlobal: true,
 })
-repl.setupHistory?.('.node_repl_history', (err, r) => {
+repl.setupHistory('.node_repl_history', (err, r) => {
   if (!_.isNil(err)) loggers.error(err)
 })
 

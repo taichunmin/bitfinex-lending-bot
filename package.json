@@ -8,30 +8,37 @@
   "version": "0.1.0",
   "dependencies": {
     "@taichunmin/bitfinex": "^0.0.12",
-    "bitfinex-api-node": "^7.0.0",
-    "dayjs": "^1.11.13",
-    "debug": "^4.4.1",
-    "dotenv": "^16.5.0",
-    "js-yaml": "^4.1.0",
+    "bitfinex-api-node": "^8.0.0",
+    "dayjs": "^1.11.19",
+    "debug": "^4.4.3",
+    "dotenv": "^17.3.1",
+    "js-yaml": "^4.1.1",
     "json5": "^2.2.3",
-    "lodash": "^4.17.21",
+    "lodash": "^4.17.23",
+    "octokit": "^5.0.5",
     "papaparse": "^5.5.3",
     "technicalindicators": "^3.1.0",
-    "zod": "^3.25.51"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/lodash": "^4.17.17",
-    "eslint": "^9.0.0",
+    "@tsconfig/node-lts": "^24.0.0",
+    "@types/debug": "^4.1.12",
+    "@types/js-yaml": "^4.0.9",
+    "@types/lodash": "^4.17.24",
+    "@types/papaparse": "^5.5.2",
+    "eslint": "^9.39.2",
+    "eslint-config-love": "^140.0.0",
     "eslint-config-standard": "^17.1.0",
-    "eslint-plugin-import": "^2.31.0",
-    "eslint-plugin-n": "^17.19.0",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-n": "^17.23.1",
     "eslint-plugin-promise": "^7.2.1",
-    "jest": "^29.7.0",
-    "tsx": "^4.19.4"
+    "jest": "^30.2.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
   },
   "scripts": {
     "lint": "eslint --fix .",
-    "repl": "node bin/repl.mjs",
+    "repl": "tsx bin/repl.ts",
     "test": "jest"
   }
 }

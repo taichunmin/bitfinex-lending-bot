@@ -5,7 +5,7 @@ INPUT_CURRENCYS=USD,UST yarn tsx ./bin/funding-statistics-1.ts
 */
 
 // import first before other imports
-import { getenv } from '../lib/dotenv.mjs'
+import { getenv } from '@/lib/dotenv'
 
 import { Bitfinex, LedgersHistCategory, PlatformStatus } from '@taichunmin/bitfinex'
 import axios from 'axios'
@@ -14,10 +14,10 @@ import { promises as fsPromises } from 'node:fs'
 import * as url from 'node:url'
 import { inspect } from 'node:util'
 import { z } from 'zod'
-import { dayjs } from '../lib/dayjs.mjs'
-import { floatFormatDecimal } from '../lib/helper.mjs'
-import { createLoggersByUrl } from '../lib/logger.mjs'
-import * as telegram from '../lib/telegram.mjs'
+import { dayjs } from '@/lib/dayjs'
+import { floatFormatDecimal } from '@/lib/helper'
+import { createLoggersByUrl } from '@/lib/logger'
+import * as telegram from '@/lib/telegram.js'
 import Papa from 'papaparse'
 
 const loggers = createLoggersByUrl(import.meta.url)
@@ -35,12 +35,12 @@ function ymlDump (key: string, val: any): void {
 
 const ZodConfig = z.object({
   currencys: z.array(z.string().trim().regex(/^[\w:]+$/).toUpperCase()),
-  db: z.string().url(),
+  db: z.url(),
 })
 
 export async function main (): Promise<void> {
   const cfg = ZodConfig.parse({
-    currencys: getenv('INPUT_CURRENCYS', '')?.split(','),
+    currencys: getenv('INPUT_CURRENCYS', '').split(','),
     db: getenv('INPUT_DB', `http://taichunmin.idv.tw/bitfinex-lending-bot/${filename}/db.json`),
   })
   ymlDump('input', cfg)
@@ -69,7 +69,7 @@ export async function main (): Promise<void> {
 
     const stats: Record<string, any> = {}
     let [dateMax, dateMin]: any[] = [null, null]
-    const tplStat = date => ({ date, interest: 0, balance: null, investment: null, dpr: 0, apr1: 0, apr7: 0, apr30: 0, apr365: 0 })
+    const tplStat = (date: string) => ({ date, interest: 0, balance: null, investment: null, dpr: 0, apr1: 0, apr7: 0, apr30: 0, apr365: 0 })
     for (const payment of payments) {
       const date1 = dayjs(payment.mts).format('YYYY-MM-DD')
       dateMax = _.isNil(dateMax) || date1 > dateMax ? date1 : dateMax
@@ -105,7 +105,7 @@ export async function main (): Promise<void> {
     // ymlDump('stats', stats)
 
     // stats[dateMax]
-    if (dateMax !== db?.latestDate2?.[currency]) { // 如果有更新才發送
+    if (dateMax !== db.latestDate2?.[currency]) { // 如果有更新才發送
       _.set(db, `latestDate2.${currency}`, dateMax)
       const stat2 = stats[dateMax]
       await telegram.sendMessage({
@@ -119,7 +119,7 @@ export async function main (): Promise<void> {
  30日年化: ${floatFormatDecimal(stat2.apr30, 2)}%
 365日年化: ${floatFormatDecimal(stat2.apr365, 2)}%
 \``,
-      }).catch(err => loggers.error(inspect(err)))
+      }).catch(err => { loggers.error(inspect(err)); })
     }
 
     await writeFile(
@@ -128,7 +128,7 @@ export async function main (): Promise<void> {
     )
     await writeFile(
       new URL(`${currency}.csv`, outdir),
-      Papa.unparse(_.values(stats), { headers: true }),
+      Papa.unparse(_.values(stats), { header: true }),
     )
   }
 
@@ -157,7 +157,7 @@ const ZodDb = z.object({
 
 async function fetchDb (url: string): Promise<z.output<typeof ZodDb>> {
   try {
-    const db = (await axios.get(url))?.data
+    const db = (await axios.get(url)).data
     return ZodDb.parse(db ?? {})
   } catch (err) {
     if (err.status !== 404) loggers.error(inspect(err))
