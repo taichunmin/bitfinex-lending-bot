@@ -53,7 +53,7 @@ export function stringifyClone (obj: Record<string, any>): Record<string, any> {
       preventCircular.add(val1)
     }
     if (Buffer.isBuffer(val1)) return { type: 'Buffer', hex: val1.toString('hex') }
-    if (_.isFunction(val1.toJSON)) return val1.toJSON()
+    if (_.isFunction(val1?.toJSON)) return val1.toJSON()
     if (typeof val1 === 'bigint') return val1.toString()
     if (val1 instanceof Error) return errToJson(val1)
     if (val1 instanceof Map) return _.fromPairs([...val1.entries()])

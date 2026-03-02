@@ -1,7 +1,7 @@
 import { getenv } from '@/lib/dotenv'
 
 import { z } from '@/lib/zod'
-import type { JsonValue } from '@taichunmin/bitfinex'
+import type { JsonValue } from '@/lib/zod'
 import { RESTv2 } from 'bitfinex-api-node'
 import JSON5 from 'json5'
 import _ from 'lodash'

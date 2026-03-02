@@ -1,13 +1,9 @@
 import _ from 'lodash'
 import { getenv } from '@/lib/dotenv'
-import { z } from '@/lib/zod'
-import type { ZodAny } from 'zod'
+import { z, type JsonValue } from '@/lib/zod'
 
 const TELEGRAM_TOKEN = getenv('TELEGRAM_TOKEN')
 const TELEGRAM_CHAT_ID = getenv('TELEGRAM_CHAT_ID')
-
-export const ZodJsonValue = z.json()
-type JsonValue = z.output<typeof ZodJsonValue>
 
 const ZodUnixtimeToDate = z.codec(z.int().min(0), z.date(), {
   decode: unixtime => new Date(unixtime * 1000),
@@ -82,7 +78,7 @@ export const ZodTelegramUpdate = z.object({
 export type TelegramUpdate = z.output<typeof ZodTelegramUpdate>
 
 async function telegramPost <
-  TReq extends JsonValue | ZodAny = JsonValue | ZodAny,
+  TReq extends JsonValue | z.ZodAny = JsonValue | z.ZodAny,
   TRes extends TelegramPostResp = TelegramPostResp,
 > (path: string, body: TReq): Promise<TRes> {
   if (_.isNil(TELEGRAM_TOKEN)) throw new Error('TELEGRAM_TOKEN is not set')
@@ -135,7 +131,7 @@ export const ZodEditMessageTextReq = z.object({
   link_preview_options: ZodTelegramLinkPreviewOptions.optional(),
   reply_markup: z.any().optional(),
 })
-export type EditMessageTextReq = z.output<typeof ZodEditMessageTextReq>
+export type EditMessageTextReq = z.input<typeof ZodEditMessageTextReq>
 
 export const ZodEditMessageTextRes = z.union([z.boolean(), ZodTelegramMessage])
 export type EditMessageTextRes = z.output<typeof ZodEditMessageTextRes>
@@ -144,7 +140,12 @@ export async function editMessageText (req: z.input<typeof ZodEditMessageTextReq
 export async function editMessageText (req: EditMessageTextReq): Promise<EditMessageTextRes> {
   if (_.isNil(TELEGRAM_CHAT_ID)) throw new Error('TELEGRAM_CHAT_ID is not set')
 
-  req = ZodEditMessageTextReq.parse(req)
-  const res = await telegramPost('editMessageText', req as JsonValue)
-  return ZodEditMessageTextRes.parse(res.result)
+  const trace: Record<string, any> = { req }
+  try {
+    const req1 = trace.req = ZodEditMessageTextReq.parse(req)
+    const res = await telegramPost('editMessageText', req1 as unknown as any)
+    return ZodEditMessageTextRes.parse(res.result)
+  } catch (err) {
+    throw _.update(err, 'data.editMessageText', old => old ?? trace)
+  }
 }

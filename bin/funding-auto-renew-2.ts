@@ -18,7 +18,7 @@ import { Bitfinex, BitfinexSort, PlatformStatus } from '@taichunmin/bitfinex'
 import _ from 'lodash'
 import { scheduler } from 'node:timers/promises'
 import * as url from 'node:url'
-import { z } from 'zod'
+import { z } from '@/lib/zod'
 
 const loggers = createLoggersByUrl(import.meta.url)
 const filename = new URL(import.meta.url).pathname.replace(/^.*?([^/\\]+)\.[^.]+$/, '$1')

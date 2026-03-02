@@ -1,4 +1,4 @@
-import type { JsonValue } from "@/lib/zod"
+import type { JsonValue } from '@/lib/zod'
 import JSON5 from 'json5'
 import { dayjs } from '@/lib/dayjs'
 

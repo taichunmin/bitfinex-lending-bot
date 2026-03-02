@@ -1,7 +1,7 @@
 import 'dotenv/config'
 
 import { json5parseOrDefault } from '@/lib/helper'
-import type { JsonValue } from './zod'
+import type { JsonValue } from '@/lib/zod'
 
 export function getenv (key: string): string | undefined
 export function getenv<T = string> (key: string, defaultVal: T): string | T

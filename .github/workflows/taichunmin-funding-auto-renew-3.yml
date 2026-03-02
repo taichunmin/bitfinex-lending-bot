@@ -1,0 +1,74 @@
+name: 'taichunmin funding-auto-renew-3'
+
+on:
+  workflow_dispatch:
+  schedule:
+    # timezone: UTC
+    # 避開整點時間，因為有可能會有時間上的延誤
+    - cron: '6-56/10 * * * *'
+
+env:
+  BITFINEX_API_KEY: ${{ secrets.BITFINEX_API_KEY }}
+  BITFINEX_API_SECRET: ${{ secrets.BITFINEX_API_SECRET }}
+  TELEGRAM_CHAT_ID: '-4119951617'
+  TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+
+jobs:
+  bitfinex:
+    # 避免被 fork 的 repository 觸發，請改成自己的 GitHub 帳號
+    if: github.repository_owner == 'taichunmin'
+    # 這個名字必須跟 repo 的 Environments 名稱一樣
+    environment: taichunmin-funding-auto-renew-3
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Dump GitHub context
+        env:
+          ACTION_CONTEXT: |
+            {
+              "env": ${{ toJSON(env) }},
+              "github": ${{ toJSON(github) }},
+              "inputs": ${{ toJSON(inputs) }},
+              "job": ${{ toJSON(job) }},
+              "runner": ${{ toJSON(runner) }},
+              "secrets": ${{ toJSON(secrets) }},
+              "steps": ${{ toJSON(steps) }},
+              "vars": ${{ toJSON(vars) }}
+            }
+        run: echo "$ACTION_CONTEXT" | jq .
+      - uses: liskin/gh-workflow-keepalive@v1
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          cache: 'yarn'
+          node-version: lts/*
+      - name: Install dependencies, eslint, and run
+        env:
+          INPUT_AUTO_RENEW_3: |
+            USD:
+              amount: 0
+              rank: 0.8
+              rateMax: 0.01
+              rateMin: 0.0001
+              period:
+                3: 0.00027397
+                7: 0.00041096
+                21: 0.00068493
+                30: 0.00082192
+            UST:
+              amount: 0
+              rank: 0.8
+              rateMax: 0.01
+              rateMin: 0.0001
+              period:
+                3: 0.00027397
+                7: 0.00041096
+                21: 0.00068493
+                30: 0.00082192
+        run: |
+          set -ex
+          yarn > /dev/null 2>&1
+          yarn lint
+          yarn tsx ./bin/funding-auto-renew-3.ts
