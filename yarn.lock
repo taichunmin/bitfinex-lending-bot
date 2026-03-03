@@ -1298,10 +1298,10 @@
   dependencies:
     "@sinonjs/commons" "^3.0.1"
 
-"@taichunmin/bitfinex@^0.0.14":
-  version "0.0.14"
-  resolved "https://registry.yarnpkg.com/@taichunmin/bitfinex/-/bitfinex-0.0.14.tgz#13cd62fa04858871a00b8b27e4c1ef2b16fb15b5"
-  integrity sha512-mMG8ytMDU0BwDblupswmcMNSEATOs3OJ4iyLC2Dda32PKQADq1y5moxBqaXrfETuhoP1ejjSvLgUcjGBuQUJHQ==
+"@taichunmin/bitfinex@^0.0.15":
+  version "0.0.15"
+  resolved "https://registry.yarnpkg.com/@taichunmin/bitfinex/-/bitfinex-0.0.15.tgz#b7ba2c5c9df5b74750c06c625528aba64871f178"
+  integrity sha512-xvrhDtZo96hp3AMnMdeg5rU0f/Qi4UGWdZJkQUVSXj0Ng238XI1rv0+PMmPq6s3Dkj5owP8A8WbrHQpODzi5jA==
   dependencies:
     axios "^1.13.6"
     lodash "^4.17.23"

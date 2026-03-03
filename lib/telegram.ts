@@ -58,7 +58,7 @@ export const ZodTelegramMessage = z.looseObject({
   sender_boost_count: z.number().optional(),
   sender_business_bot: z.any().optional(),
   date: ZodUnixtimeToDate,
-  edit_date: ZodUnixtimeToDate,
+  edit_date: ZodUnixtimeToDate.optional(),
   business_connection_id: z.string().optional(),
   chat: ZodTelegramChat,
   forward_origin: z.any().optional(),
@@ -102,8 +102,14 @@ async function telegramPost <
 export async function sendMessage (body: Record<string, JsonValue>): Promise<TelegramMessage> {
   // await telegram.sendMessage({ text: 'Hello world.' })
   if (_.isNil(TELEGRAM_CHAT_ID)) throw new Error('TELEGRAM_CHAT_ID is not set')
-  const resp = await telegramPost('sendMessage', { chat_id: TELEGRAM_CHAT_ID, ...body })
-  return ZodTelegramMessage.parse(resp.result)
+
+  const trace: Record<string, any> = { body }
+  try {
+    const resp = await telegramPost('sendMessage', { chat_id: TELEGRAM_CHAT_ID, ...body })
+    return ZodTelegramMessage.parse(resp.result)
+  } catch (err) {
+    throw _.update(err, 'data.sendMessage', old => old ?? trace)
+  }
 }
 
 export const ZodTelegramMessageEntity = z.looseObject({
@@ -143,9 +149,25 @@ export async function editMessageText (req: EditMessageTextReq): Promise<EditMes
   const trace: Record<string, any> = { req }
   try {
     const req1 = trace.req = ZodEditMessageTextReq.parse(req)
-    const res = await telegramPost('editMessageText', req1 as unknown as any)
+    const res = await telegramPost('editMessageText', { chat_id: TELEGRAM_CHAT_ID, ...req1 } as any)
     return ZodEditMessageTextRes.parse(res.result)
   } catch (err) {
     throw _.update(err, 'data.editMessageText', old => old ?? trace)
   }
+}
+
+export function tgMdEscape (text: string): string {
+  return text.replaceAll(/[_*[\]()~`>#+=|{}.!-]/g, c => `\\${c}`)
+}
+
+export const ZodTgMdDateOpts = z.object({
+  text: z.string().default('').catch(''),
+  date: z.date(),
+  format: z.string().optional(),
+})
+export function tgMdDate (opts: z.input<typeof ZodTgMdDateOpts>): string {
+  const url = new URL('tg://time')
+  url.searchParams.set('unix', `${Math.trunc(opts.date.getTime() / 1e3)}`)
+  if (_.isString(opts.format)) url.searchParams.set('format', opts.format)
+  return `![${tgMdEscape(opts.text ?? '')}](${url.href})`
 }

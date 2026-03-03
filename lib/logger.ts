@@ -78,11 +78,7 @@ export function jsonStringify (obj: Record<string, any>): string {
 
 export function ymlStringify (obj: Record<string, any>): string {
   try {
-    return jsyaml.dump(stringifyClone(obj), {
-      condenseFlow: true,
-      lineWidth: -1,
-      replacer: stringifyReplacer,
-    }).slice(0, -1)
+    return jsyaml.dump(JSON.parse(jsonStringify(obj))).slice(0, -1)
   } catch (err) {
     throw _.set(new Error(err.message), 'cause', err)
   }

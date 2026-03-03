@@ -7,7 +7,7 @@
   "type": "module",
   "version": "0.1.0",
   "dependencies": {
-    "@taichunmin/bitfinex": "^0.0.14",
+    "@taichunmin/bitfinex": "^0.0.15",
     "bitfinex-api-node": "^8.0.0",
     "dayjs": "^1.11.19",
     "debug": "^4.4.3",

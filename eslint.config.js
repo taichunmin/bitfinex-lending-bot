@@ -39,6 +39,7 @@ export default [
       '@typescript-eslint/prefer-destructuring': 0,
       '@typescript-eslint/unbound-method': 0,
       'complexity': 0,
+      'max-depth': 0,
       'multiline-ternary': 0,
       'no-await-in-loop': 0,
       'no-console': 0,
