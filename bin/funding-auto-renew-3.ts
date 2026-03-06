@@ -11,13 +11,13 @@ yarn tsx ./bin/funding-auto-renew-3.ts
 import { getenv } from '@/lib/dotenv'
 
 import { dayjs } from '@/lib/dayjs'
-import { dateStringify, floatFormatDecimal, floatFormatPercent, floatIsEqual, numFloor8, progressPercent, rateStringify } from '@/lib/helper'
+import { dateStringify, floatFormatDecimal, floatFormatPercent, floatIsEqual, floatFloor8, progressPercent, rateStringify } from '@/lib/helper'
 import { createLoggersByUrl, ymlStringify } from '@/lib/logger'
 import * as telegram from '@/lib/telegram'
 import { tgMdEscape } from '@/lib/telegram'
 import { z } from '@/lib/zod'
 import { Bitfinex, BitfinexSort, PlatformStatus } from '@taichunmin/bitfinex'
-import yaml from 'js-yaml'
+import jsyaml from 'js-yaml'
 import _ from 'lodash'
 import { scheduler } from 'node:timers/promises'
 import * as url from 'node:url'
@@ -64,7 +64,7 @@ const ZodDb = z.object({
   notified: z.record(
     z.string(),
     z.object({
-      balance: z.number().transform(numFloor8),
+      balance: z.number().transform(floatFloor8),
       creditIds: z.array(z.int()),
       msgId: z.int(),
     }).nullish().catch(null),
@@ -80,7 +80,7 @@ export async function main (): Promise<void> {
   }
 
   // 讀取並驗證設定
-  const cfg = ZodConfig.parse(yaml.load(getenv('INPUT_AUTO_RENEW_3', ''), { json: true, schema: yaml.JSON_SCHEMA }))
+  const cfg = ZodConfig.parse(jsyaml.load(getenv('INPUT_AUTO_RENEW_3', ''), { json: true, schema: jsyaml.JSON_SCHEMA }))
 
   const db = ZodDb.parse((await bitfinex.v2AuthReadSettings([DB_KEY]))[DB_KEY.slice(4)])
   ymlDump('db', db)

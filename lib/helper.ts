@@ -44,7 +44,7 @@ export function floatIsEqual (float1: number, float2: number): boolean {
   return Math.abs(float1 - float2) < Number.EPSILON
 }
 
-export const numFloor8 = (num: number) => _.floor(num, 8)
+export const floatFloor8 = (num: number) => _.floor(num, 8)
 
 export function progressPercent (cur: number, max: number, precision = 2): string {
   if (cur < 0 || max <= 0) return '?%'

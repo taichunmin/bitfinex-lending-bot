@@ -7,21 +7,21 @@ INPUT_CURRENCYS=USD,UST yarn tsx ./bin/funding-statistics-1.ts
 // import first before other imports
 import { getenv } from '@/lib/dotenv'
 
+import { dayjs } from '@/lib/dayjs'
+import { floatFormatDecimal } from '@/lib/helper'
+import { createLoggersByUrl } from '@/lib/logger'
+import * as telegram from '@/lib/telegram'
+import { z } from '@/lib/zod'
 import { Bitfinex, LedgersHistCategory, PlatformStatus } from '@taichunmin/bitfinex'
-import axios from 'axios'
 import _ from 'lodash'
 import { promises as fsPromises } from 'node:fs'
 import * as url from 'node:url'
 import { inspect } from 'node:util'
-import { z } from '@/lib/zod'
-import { dayjs } from '@/lib/dayjs'
-import { floatFormatDecimal } from '@/lib/helper'
-import { createLoggersByUrl } from '@/lib/logger'
-import * as telegram from '@/lib/telegram.js'
 import Papa from 'papaparse'
 
 const loggers = createLoggersByUrl(import.meta.url)
 const filename = new URL(import.meta.url).pathname.replace(/^.*?([^/\\]+)\.[^.]+$/, '$1')
+const DB_KEY = `api:taichunmin_${filename}`
 const outdir = new URL(`../dist/${filename}/`, import.meta.url)
 const bitfinex = new Bitfinex({
   apiKey: getenv('BITFINEX_API_KEY'),
@@ -30,18 +30,16 @@ const bitfinex = new Bitfinex({
 })
 
 function ymlDump (key: string, val: any): void {
-  loggers.log(_.set({}, key, val))
+  loggers.log({ [key]: val })
 }
 
 const ZodConfig = z.object({
   currencys: z.array(z.string().trim().regex(/^[\w:]+$/).toUpperCase()),
-  db: z.url(),
 })
 
 export async function main (): Promise<void> {
   const cfg = ZodConfig.parse({
     currencys: getenv('INPUT_CURRENCYS', '').split(','),
-    db: getenv('INPUT_DB', `http://taichunmin.idv.tw/bitfinex-lending-bot/${filename}/db.json`),
   })
   ymlDump('input', cfg)
   if ((await Bitfinex.v2PlatformStatus()).status === PlatformStatus.MAINTENANCE) {
@@ -54,7 +52,7 @@ export async function main (): Promise<void> {
   }
 
   const tsToday = dayjs().startOf('day')
-  const db = await fetchDb(cfg.db)
+  const db = await fetchDb()
   ymlDump('db', db)
 
   for (const currency of cfg.currencys) {
@@ -72,8 +70,8 @@ export async function main (): Promise<void> {
     const tplStat = (date: string) => ({ date, interest: 0, balance: null, investment: null, dpr: 0, apr1: 0, apr7: 0, apr30: 0, apr365: 0 })
     for (const payment of payments) {
       const date1 = dayjs(payment.mts).format('YYYY-MM-DD')
-      dateMax = _.isNil(dateMax) || date1 > dateMax ? date1 : dateMax
-      dateMin = _.isNil(dateMin) || date1 < dateMin ? date1 : dateMin
+      dateMax = _.max([dateMax ?? date1, date1])
+      dateMin = _.min([dateMin ?? date1, date1])
 
       const stat = stats[date1] ??= tplStat(date1)
       stat.balance = Math.max(stat.balance ?? 0, payment.balance)
@@ -119,7 +117,7 @@ export async function main (): Promise<void> {
  30日年化: ${floatFormatDecimal(stat2.apr30, 2)}%
 365日年化: ${floatFormatDecimal(stat2.apr365, 2)}%
 \``,
-      }).catch(err => { loggers.error(inspect(err)); })
+      })
     }
 
     await writeFile(
@@ -132,11 +130,8 @@ export async function main (): Promise<void> {
     )
   }
 
-  // db.json
-  await writeFile(
-    new URL(`db.json`, outdir),
-    JSON.stringify(db, null, 2),
-  )
+  ymlDump('newDb', db)
+  await bitfinex.v2AuthWriteSettingsSet({ [DB_KEY]: ZodDb.parse(db) as any })
 }
 
 async function writeFile (filepath: URL, data: string): Promise<void> {
@@ -148,16 +143,17 @@ async function writeFile (filepath: URL, data: string): Promise<void> {
   }
 }
 
-const ZodAnyToUndefined = z.any().transform(() => undefined)
-
 const ZodDb = z.object({
-  schema: z.number().int().positive().default(2),
-  latestDate2: z.record(z.string(), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).or(ZodAnyToUndefined).optional(),
+  schema: z.int().min(1).default(2), // 用來辨識資料結構版本，方便未來升級
+  latestDate2: z.record(
+    z.string(),
+    z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish().catch(null),
+  ).nullish().catch(null),
 })
 
-async function fetchDb (url: string): Promise<z.output<typeof ZodDb>> {
+async function fetchDb (): Promise<z.output<typeof ZodDb>> {
   try {
-    const db = (await axios.get(url)).data
+    const db = (await bitfinex.v2AuthReadSettings([DB_KEY]))[DB_KEY.slice(4)]
     return ZodDb.parse(db ?? {})
   } catch (err) {
     if (err.status !== 404) loggers.error(inspect(err))
