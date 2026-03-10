@@ -8,13 +8,12 @@ INPUT_CURRENCYS=USD,UST yarn tsx ./bin/funding-statistics-1.ts
 import { getenv } from '@/lib/dotenv'
 
 import { dayjs } from '@/lib/dayjs'
-import { floatFormatDecimal } from '@/lib/helper'
+import { floatFormatDecimal, writeFile } from '@/lib/helper'
 import { createLoggersByUrl } from '@/lib/logger'
 import * as telegram from '@/lib/telegram'
 import { z } from '@/lib/zod'
 import { Bitfinex, LedgersHistCategory, PlatformStatus } from '@taichunmin/bitfinex'
 import _ from 'lodash'
-import { promises as fsPromises } from 'node:fs'
 import * as url from 'node:url'
 import { inspect } from 'node:util'
 import Papa from 'papaparse'
@@ -132,15 +131,6 @@ export async function main (): Promise<void> {
 
   ymlDump('newDb', db)
   await bitfinex.v2AuthWriteSettingsSet({ [DB_KEY]: ZodDb.parse(db) as any })
-}
-
-async function writeFile (filepath: URL, data: string): Promise<void> {
-  try {
-    await fsPromises.mkdir(new URL('.', filepath), { recursive: true })
-    await fsPromises.writeFile(filepath, data)
-  } catch (err) {
-    _.set(err, 'data.writeFile', { filepath, data })
-  }
 }
 
 const ZodDb = z.object({

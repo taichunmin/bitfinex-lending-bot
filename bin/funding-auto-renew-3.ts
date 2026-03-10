@@ -11,13 +11,12 @@ yarn tsx ./bin/funding-auto-renew-3.ts
 import { getenv } from '@/lib/dotenv'
 
 import { dayjs } from '@/lib/dayjs'
-import { dateStringify, floatFormatDecimal, floatFormatPercent, floatIsEqual, floatFloor8, progressPercent, rateStringify } from '@/lib/helper'
+import { dateStringify, floatFloor8, floatFormatDecimal, floatFormatPercent, floatIsEqual, parseYaml, progressPercent, rateStringify } from '@/lib/helper'
 import { createLoggersByUrl, ymlStringify } from '@/lib/logger'
 import * as telegram from '@/lib/telegram'
 import { tgMdEscape } from '@/lib/telegram'
 import { z } from '@/lib/zod'
 import { Bitfinex, BitfinexSort, PlatformStatus } from '@taichunmin/bitfinex'
-import jsyaml from 'js-yaml'
 import _ from 'lodash'
 import { scheduler } from 'node:timers/promises'
 import * as url from 'node:url'
@@ -80,7 +79,7 @@ export async function main (): Promise<void> {
   }
 
   // 讀取並驗證設定
-  const cfg = ZodConfig.parse(jsyaml.load(getenv('INPUT_AUTO_RENEW_3', ''), { json: true, schema: jsyaml.JSON_SCHEMA }))
+  const cfg = ZodConfig.parse(parseYaml(getenv('INPUT_AUTO_RENEW_3', '')))
 
   const db = ZodDb.parse((await bitfinex.v2AuthReadSettings([DB_KEY]))[DB_KEY.slice(4)])
   ymlDump('db', db)
