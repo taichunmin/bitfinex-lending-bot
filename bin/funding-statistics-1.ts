@@ -14,6 +14,7 @@ import * as telegram from '@/lib/telegram'
 import { z } from '@/lib/zod'
 import { Bitfinex, LedgersHistCategory, PlatformStatus } from '@taichunmin/bitfinex'
 import _ from 'lodash'
+import { promises as fsPromises } from 'node:fs'
 import * as url from 'node:url'
 import { inspect } from 'node:util'
 import Papa from 'papaparse'
@@ -22,15 +23,13 @@ const loggers = createLoggersByUrl(import.meta.url)
 const filename = new URL(import.meta.url).pathname.replace(/^.*?([^/\\]+)\.[^.]+$/, '$1')
 const DB_KEY = `api:taichunmin_${filename}`
 const outdir = new URL(`../dist/${filename}/`, import.meta.url)
+const creditsOutdir = new URL('../dist/funding-export-credits-1/', import.meta.url)
+const MS_PER_DAY = 24 * 60 * 60 * 1000
 const bitfinex = new Bitfinex({
   apiKey: getenv('BITFINEX_API_KEY'),
   apiSecret: getenv('BITFINEX_API_SECRET'),
   affCode: getenv('BITFINEX_AFF_CODE'),
 })
-
-function ymlDump (key: string, val: any): void {
-  loggers.log({ [key]: val })
-}
 
 const ZodConfig = z.object({
   currencys: z.array(z.string().trim().regex(/^[\w:]+$/).toUpperCase()),
@@ -55,6 +54,8 @@ export async function main (): Promise<void> {
   ymlDump('db', db)
 
   for (const currency of cfg.currencys) {
+    const utilizationByDate = await calcUtilizationByDate(currency)
+
     let payments = await bitfinex.v2AuthReadLedgersHist({
       category: LedgersHistCategory.MarginSwapInterestPayment,
       currency,
@@ -66,7 +67,7 @@ export async function main (): Promise<void> {
 
     const stats: Record<string, any> = {}
     let [dateMax, dateMin]: any[] = [null, null]
-    const tplStat = (date: string) => ({ date, interest: 0, balance: null, investment: null, dpr: 0, apr1: 0, apr7: 0, apr30: 0, apr365: 0 })
+    const tplStat = (date: string) => ({ date, interest: 0, balance: null, investment: null, utilization: 0, dpr: 0, apr1: 0, apr7: 0, apr30: 0, apr365: 0 })
     for (const payment of payments) {
       const date1 = dayjs(payment.mts).format('YYYY-MM-DD')
       dateMax = _.max([dateMax ?? date1, date1])
@@ -95,6 +96,8 @@ export async function main (): Promise<void> {
       stat.investment ??= prevBalance
       stat.balance ??= prevBalance
       prevBalance = stat.balance
+      const utilizedAmountByDay = utilizationByDate[date2] ?? 0
+      stat.utilization = stat.investment <= 0 ? 0 : _.round(100 * utilizedAmountByDay / stat.investment, 8)
       stat.apr7 /= 7
       stat.apr30 /= 30
       stat.apr365 /= 365
@@ -131,6 +134,60 @@ export async function main (): Promise<void> {
 
   ymlDump('newDb', db)
   await bitfinex.v2AuthWriteSettingsSet({ [DB_KEY]: ZodDb.parse(db) as any })
+}
+
+interface CreditCsvRow {
+  amount?: string
+  closedAt?: string
+  openedAt?: string
+  side?: string
+}
+
+async function calcUtilizationByDate (currency: string): Promise<Record<string, number>> {
+  const filepath = new URL(`${currency}.csv`, creditsOutdir)
+
+  const parsed = await (async () => {
+    try {
+      const csvData = await fsPromises.readFile(filepath, 'utf8')
+      return Papa.parse<CreditCsvRow>(csvData, {
+        header: true,
+        skipEmptyLines: true,
+      })
+    } catch (err) {
+      if (err.code !== 'ENOENT') loggers.error(inspect(err))
+      return null
+    }
+  })()
+  if (_.isNil(parsed)) return {}
+
+  const results: Record<string, number> = {}
+
+  for (const row of parsed.data) {
+    if (_.toSafeInteger(row.side) !== 1) continue
+    const amount = _.toFinite(row.amount)
+    if (amount <= 0) continue
+
+    const openedAt = dayjs.utc(row.openedAt, 'YYYY-MM-DD HH:mm:ss', true)
+    const closedAt = dayjs.utc(row.closedAt, 'YYYY-MM-DD HH:mm:ss', true)
+    if (!openedAt.isValid() || !closedAt.isValid() || !closedAt.isAfter(openedAt)) continue
+
+    for (let dayStart = openedAt.startOf('day'); dayStart.isBefore(closedAt); dayStart = dayStart.add(1, 'day')) {
+      const dayEnd = dayStart.add(1, 'day')
+      const overlapStart = Math.max(dayStart.valueOf(), openedAt.valueOf())
+      const overlapEnd = Math.min(dayEnd.valueOf(), closedAt.valueOf())
+      if (overlapEnd <= overlapStart) continue
+
+      const date = dayStart.format('YYYY-MM-DD')
+      const amountByDay = amount * (overlapEnd - overlapStart) / MS_PER_DAY
+      results[date] = _.round((results[date] ?? 0) + amountByDay, 8)
+    }
+  }
+
+  return results
+}
+
+function ymlDump (key: string, val: any): void {
+  loggers.log({ [key]: val })
 }
 
 const ZodDb = z.object({

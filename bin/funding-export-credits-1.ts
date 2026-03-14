@@ -13,11 +13,11 @@ gcloud storage cp -R -Z --cache-control='public, no-transform, max-age=30' ./dis
 import { getenv } from '@/lib/dotenv'
 
 // import { uploadCsv } from '@/lib/gcs'
-import { dayjs } from '@/lib/dayjs'
 import { toUtcDateStr, writeFile } from '@/lib/helper'
 import { createLoggersByUrl } from '@/lib/logger'
 import { Bitfinex, PlatformStatus } from '@taichunmin/bitfinex'
 import _ from 'lodash'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { inspect } from 'node:util'
 import Papa from 'papaparse'
@@ -31,9 +31,8 @@ const bitfinex = new Bitfinex({
   affCode: getenv('BITFINEX_AFF_CODE'),
 })
 
-export async function main (argv: string[]): Promise<void> {
-  const trace: Record<string, any> = { argv }
-  ymlDump('argv', argv)
+export async function main (): Promise<void> {
+  const trace: Record<string, any> = {}
 
   try {
     if ((await Bitfinex.v2PlatformStatus()).status === PlatformStatus.MAINTENANCE) {
@@ -41,61 +40,43 @@ export async function main (argv: string[]): Promise<void> {
       return
     }
 
-    const months = _.filter(argv, m => dayjs.utc(m, 'YYYY-MM', true).isValid())
-    if (months.length === 0) {
-      months.push(...[
-        dayjs.utc().add(-1, 'month').format('YYYY-MM'),
-        dayjs.utc().format('YYYY-MM'),
-      ])
-    }
-
-    let createdFiles = 0
-    for (const month of months) {
+    const creditsByCurr: Record<string, any[]> = {}
+    let creditEnd = null
+    let creditsLen = 0
+    while (true) {
       try {
-        const monthStart = trace.monthStart = dayjs.utc(month).startOf('month').toDate()
-        const monthEnd = trace.monthEnd = dayjs.utc(month).endOf('month').toDate()
-        let creditEnd = dayjs.utc(month).endOf('month').add(5, 'day').toDate()
-        let credits = []
-        while (true) {
-          const credits1 = await bitfinex.v2AuthReadFundingCreditsHist({
-            start: monthStart,
-            end: creditEnd,
-            limit: 500,
+        const credits1 = await bitfinex.v2AuthReadFundingCreditsHist({
+          ...(_.isNil(creditEnd) ? {} : { end: creditEnd }),
+          limit: 500,
+        })
+        creditsLen += credits1.length
+        for (const credit1 of credits1) {
+          const credits = creditsByCurr[credit1.currency] ??= []
+          if (_.last(credits)?.id === credit1.id) continue
+          credits.push({
+            ..._.pick(credit1, ['id', 'amount', 'period', 'rate', 'side', 'status']),
+            openedAt: toUtcDateStr(credit1.mtsOpening),
+            closedAt: toUtcDateStr(credit1.mtsLastPayout),
+            createdAt: toUtcDateStr(credit1.mtsCreate),
+            updatedAt: toUtcDateStr(credit1.mtsUpdate),
           })
-          // console.log(`credits1.length = ${credits1.length}`)
-          credits.push(...credits1)
-          if (credits1.length < 500) break
-          creditEnd = dayjs.utc(credits1[credits1.length - 1].mtsCreate).toDate()
+          creditEnd = _.min([creditEnd ?? credit1.mtsUpdate, credit1.mtsUpdate])
         }
-        // console.log(`credits.length = ${credits.length}`)
-
-        // convert to lookerstudio csv
-        credits = _.chain(credits)
-          .uniqBy('id')
-          .filter(credit => credit.mtsOpening <= monthEnd && credit.mtsLastPayout >= monthStart)
-          .map(credit => ({
-            ..._.pick(credit, ['id', 'amount', 'currency', 'period', 'rate', 'side', 'status']),
-            openedAt: toUtcDateStr(credit.mtsOpening),
-            closedAt: toUtcDateStr(credit.mtsLastPayout),
-            createdAt: toUtcDateStr(credit.mtsCreate),
-            updatedAt: toUtcDateStr(credit.mtsUpdate),
-          }))
-          .orderBy(['id'], ['asc'])
-          .value()
-
-        for (const [currency, credits2] of _.entries(_.groupBy(credits, 'currency'))) {
-          await writeFile(
-            new URL(`${month}/${currency}.csv`, outdir),
-            Papa.unparse(credits2, { header: true }),
-          )
-          createdFiles++
-        }
+        if (credits1.length < 500) break
       } catch (err) {
-        _.update(err, 'data.loopmonth', old => old ?? trace)
-        loggers.error(err)
+        loggers.log(err)
+        break
       }
+      await sleep(1000 / 90) // Ratelimit: 90 req/min
     }
-    ymlDump('createdFiles', createdFiles)
+    ymlDump('creditsLen', creditsLen)
+
+    for (const [currency, credits2] of _.entries(creditsByCurr)) {
+      await writeFile(
+        new URL(`${currency}.csv`, outdir),
+        Papa.unparse(credits2, { header: true }),
+      )
+    }
   } catch (err) {
     throw _.update(err, 'data.main', old => old ?? trace)
   }
@@ -110,7 +91,7 @@ try {
   if (!_.startsWith(import.meta.url, 'file:')) throw new NotMainModuleError()
   const modulePath = fileURLToPath(import.meta.url)
   if (process.argv[1] !== modulePath) throw new NotMainModuleError()
-  await main(process.argv.slice(2))
+  await main()
 } catch (err) {
   if (!(err instanceof NotMainModuleError)) {
     loggers.error(inspect(err))

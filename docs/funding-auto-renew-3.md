@@ -17,8 +17,6 @@
 均民自 2025/03/21 開始，分別在 USD 以及 UST 放了約 1000 美元的本金來實測放貸績效，詳細報告在此：
 
 - [綠葉放貸收益報告](https://lookerstudio.google.com/reporting/500aadf5-8d0d-4cba-a1ce-7275c7e5b21e)
-  - [USD.json](http://taichunmin.idv.tw/bitfinex-lending-bot/funding-statistics-1/USD.json) [USD.csv](http://taichunmin.idv.tw/bitfinex-lending-bot/funding-statistics-1/USD.csv)
-  - [UST.json](http://taichunmin.idv.tw/bitfinex-lending-bot/funding-statistics-1/UST.json) [UST.csv](http://taichunmin.idv.tw/bitfinex-lending-bot/funding-statistics-1/UST.csv)
 
 ## 執行方式
 
@@ -29,7 +27,7 @@ GitHub Actions：
 
 本地端開發單次執行：
 
-```bash本地端
+```bash
 yarn tsx ./bin/funding-auto-renew-3.ts
 ```
 
