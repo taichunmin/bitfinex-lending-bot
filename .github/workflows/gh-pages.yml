@@ -52,6 +52,7 @@ jobs:
         run: |
           set -ex
           yarn
+          yarn tsx ./bin/funding-export-credits-1.ts
           INPUT_CURRENCYS=USD,UST yarn tsx ./bin/funding-statistics-1.ts
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
