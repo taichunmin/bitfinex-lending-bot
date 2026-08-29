@@ -18,7 +18,12 @@
 | [a6984234/Andy-Bitfinex-Loan-Bot](https://github.com/a6984234/Andy-Bitfinex-Loan-Bot) | ![](https://img.shields.io/github/stars/a6984234/Andy-Bitfinex-Loan-Bot?style=flat) | ![](https://img.shields.io/github/forks/a6984234/Andy-Bitfinex-Loan-Bot?style=flat) |
 | [liverpool1026/funding_bot](https://github.com/liverpool1026/funding_bot) | ![](https://img.shields.io/github/stars/liverpool1026/funding_bot?style=flat) | ![](https://img.shields.io/github/forks/liverpool1026/funding_bot?style=flat) |
 | [cryptic-core/bf-lending-bot](https://github.com/cryptic-core/bf-lending-bot) | ![](https://img.shields.io/github/stars/cryptic-core/bf-lending-bot?style=flat) | ![](https://img.shields.io/github/forks/cryptic-core/bf-lending-bot?style=flat) |
-| [drodil/bitfinex_bot](https://github.com/drodil/bitfinex_bot) | ![](https://img.shields.io/github/stars/drodil/bitfinex_bot?style=flat) | ![](https://img.shields.io/github/forks/drodil/bitfinex_bot?style=flat) |
+| [MMquant/BFX-lending-bot](https://github.com/MMquant/BFX-lending-bot) | ![](https://img.shields.io/github/stars/MMquant/BFX-lending-bot?style=flat) | ![](https://img.shields.io/github/forks/MMquant/BFX-lending-bot?style=flat) |
+| [hankwu0501/bitfinex-lending-bot](https://github.com/hankwu0501/bitfinex-lending-bot) | ![](https://img.shields.io/github/stars/hankwu0501/bitfinex-lending-bot?style=flat) | ![](https://img.shields.io/github/forks/hankwu0501/bitfinex-lending-bot?style=flat) |
+| [ipmman/lending-bot](https://github.com/ipmman/lending-bot) | ![](https://img.shields.io/github/stars/ipmman/lending-bot?style=flat) | ![](https://img.shields.io/github/forks/ipmman/lending-bot?style=flat) |
+| [allen032062/bitfinex-funding-bot](https://github.com/allen032062/bitfinex-funding-bot) | ![](https://img.shields.io/github/stars/allen032062/bitfinex-funding-bot?style=flat) | ![](https://img.shields.io/github/forks/allen032062/bitfinex-funding-bot?style=flat) |
+
+各機器人放貸策略的拆解分析：[docs/competitor-lending-strategies.md](docs/competitor-lending-strategies.md)
 
 ## Related Lending Bots
 
