@@ -1,7 +1,7 @@
 /*
 INPUT_CURRENCYS=USD,UST yarn tsx ./bin/funding-statistics-1.ts
 
-計算昨日年化、七日年化、三十日年化
+計算 1/7/30/365 日年化與資金利用率，發送 Telegram 報告並輸出 CSV/JSON
 */
 
 // import first before other imports
@@ -53,8 +53,11 @@ export async function main (): Promise<void> {
   const db = await fetchDb()
   ymlDump('db', db)
 
+  // 進行中（ACTIVE）的借出：以 [mtsOpening, 現在] 併入每日放出金額計算，讓昨天的利用率在執行當下就是完整的
+  const activeByCurr = _.groupBy(await bitfinex.v2AuthReadFundingCredits(), 'currency')
+
   for (const currency of cfg.currencys) {
-    const utilizationByDate = await calcUtilizationByDate(currency)
+    const lentAmountByDate = await calcLentAmountByDate(currency, activeByCurr[currency] ?? [])
 
     let payments = await bitfinex.v2AuthReadLedgersHist({
       category: LedgersHistCategory.MarginSwapInterestPayment,
@@ -67,7 +70,7 @@ export async function main (): Promise<void> {
 
     const stats: Record<string, any> = {}
     let [dateMax, dateMin]: any[] = [null, null]
-    const tplStat = (date: string) => ({ date, interest: 0, balance: null, investment: null, utilization: 0, dpr: 0, apr1: 0, apr7: 0, apr30: 0, apr365: 0 })
+    const tplStat = (date: string) => ({ date, interest: 0, apr1: 0, apr7: 0, apr30: 0, apr365: 0, balance: null, dpr: 0, investment: null, lentRatio1: 0, lentRatio7: 0, lentRatio30: 0, lentRatio365: 0 })
     for (const payment of payments) {
       const date1 = dayjs(payment.mts).format('YYYY-MM-DD')
       dateMax = _.max([dateMax ?? date1, date1])
@@ -90,17 +93,40 @@ export async function main (): Promise<void> {
       }
     }
     let prevBalance = 0
+    const orderedDates: string[] = []
     for (let ts2 = dayjs(dateMin); ts2 <= tsToday; ts2 = ts2.add(1, 'day')) {
       const date2 = ts2.format('YYYY-MM-DD')
+      orderedDates.push(date2)
       const stat = stats[date2] ??= tplStat(date2)
       stat.investment ??= prevBalance
       stat.balance ??= prevBalance
       prevBalance = stat.balance
-      const utilizedAmountByDay = utilizationByDate[date2] ?? 0
-      stat.utilization = stat.investment <= 0 ? 0 : _.round(100 * utilizedAmountByDay / stat.investment, 8)
+      const lentAmountByDay = lentAmountByDate[date2] ?? 0
+      stat.lentRatio1 = stat.investment <= 0 ? 0 : _.round(100 * lentAmountByDay / stat.investment, 8)
       stat.apr7 /= 7
       stat.apr30 /= 30
       stat.apr365 /= 365
+    }
+
+    // trailing N 日的資金加權利用率：Σ(每日放出金額) / Σ(每日可投入本金)，分母用當日起始資金 investment[d]，前綴和加速
+    let cumLent = 0
+    let cumInvestment = 0
+    const prefixLent = [0]
+    const prefixInvestment = [0]
+    for (const date2 of orderedDates) {
+      cumLent += lentAmountByDate[date2] ?? 0
+      cumInvestment += stats[date2].investment ?? 0
+      prefixLent.push(cumLent)
+      prefixInvestment.push(cumInvestment)
+    }
+    for (let i = 0; i < orderedDates.length; i++) {
+      const stat = stats[orderedDates[i]]
+      for (const n of [7, 30, 365]) {
+        const lo = Math.max(0, i + 1 - n)
+        const sumLent = prefixLent[i + 1] - prefixLent[lo]
+        const sumInvestment = prefixInvestment[i + 1] - prefixInvestment[lo]
+        stat[`lentRatio${n}`] = sumInvestment <= 0 ? 0 : _.round(100 * sumLent / sumInvestment, 8)
+      }
     }
     // ymlDump('stats', stats)
 
@@ -108,16 +134,18 @@ export async function main (): Promise<void> {
     if (dateMax !== db.latestDate2?.[currency]) { // 如果有更新才發送
       _.set(db, `latestDate2.${currency}`, dateMax)
       const stat2 = stats[dateMax]
+      // 利用率取前一天結尾的視窗：dateMax 的利息其實是前一經濟日賺的，且 dateMax 當天只到執行時刻（約 00:45 UTC）
+      const statLent = stats[dayjs(dateMax).subtract(1, 'day').format('YYYY-MM-DD')] ?? tplStat('')
+      // 例：`  7日年化: 10.85% (利用率 99.50%)`，年化取 dateMax、利用率取 dateMax−1
+      const aprLine = (days: number): string =>
+        `${String(days).padStart(3)}日年化: ${floatFormatDecimal(stat2[`apr${days}`], 2).padStart(6)}% (利用率 ${floatFormatDecimal(statLent[`lentRatio${days}`], 2).padStart(6)}%)`
       await telegram.sendMessage({
         parse_mode: 'MarkdownV2',
         text: `\\# ${currency} 放貸收益報告
 \`
 日期: ${dateMax.replaceAll('-', '\\-')}
 利息: ${floatFormatDecimal(stat2.interest, 8)} ${currency}
-  1日年化: ${floatFormatDecimal(stat2.apr1, 2)}%
-  7日年化: ${floatFormatDecimal(stat2.apr7, 2)}%
- 30日年化: ${floatFormatDecimal(stat2.apr30, 2)}%
-365日年化: ${floatFormatDecimal(stat2.apr365, 2)}%
+${[1, 7, 30, 365].map(aprLine).join('\n')}
 \``,
       })
     }
@@ -139,11 +167,23 @@ export async function main (): Promise<void> {
 interface CreditCsvRow {
   amount?: string
   closedAt?: string
+  id?: string
   openedAt?: string
   side?: string
 }
 
-async function calcUtilizationByDate (currency: string): Promise<Record<string, number>> {
+interface FundingCredit {
+  amount: number
+  mtsOpening: Date
+  side: number
+}
+
+/**
+ * 每日「時間加權放出本金」：把每筆出借的金額，依其存續時間攤到每一個 UTC 日期。
+ * 已關閉的出借讀自 `funding-export-credits-1` 匯出的 CSV；進行中（ACTIVE）的出借以 `[mtsOpening, 現在]` 併入，
+ * 否則多為 2 天期、執行當下還開著的單會讓昨天的放出量嚴重低估。
+ */
+async function calcLentAmountByDate (currency: string, activeCredits: FundingCredit[]): Promise<Record<string, number>> {
   const filepath = new URL(`${currency}.csv`, creditsOutdir)
 
   const parsed = await (async () => {
@@ -158,18 +198,11 @@ async function calcUtilizationByDate (currency: string): Promise<Record<string, 
       return null
     }
   })()
-  if (_.isNil(parsed)) return {}
 
   const results: Record<string, number> = {}
 
-  for (const row of parsed.data) {
-    if (_.toSafeInteger(row.side) !== 1) continue
-    const amount = _.toFinite(row.amount)
-    if (amount <= 0) continue
-
-    const openedAt = dayjs.utc(row.openedAt, 'YYYY-MM-DD HH:mm:ss', true)
-    const closedAt = dayjs.utc(row.closedAt, 'YYYY-MM-DD HH:mm:ss', true)
-    if (!openedAt.isValid() || !closedAt.isValid() || !closedAt.isAfter(openedAt)) continue
+  const addSpan = (amount: number, openedAt: dayjs.Dayjs, closedAt: dayjs.Dayjs): void => {
+    if (!(amount > 0) || !openedAt.isValid() || !closedAt.isValid() || !closedAt.isAfter(openedAt)) return
 
     for (let dayStart = openedAt.startOf('day'); dayStart.isBefore(closedAt); dayStart = dayStart.add(1, 'day')) {
       const dayEnd = dayStart.add(1, 'day')
@@ -181,6 +214,25 @@ async function calcUtilizationByDate (currency: string): Promise<Record<string, 
       const amountByDay = amount * (overlapEnd - overlapStart) / MS_PER_DAY
       results[date] = _.round((results[date] ?? 0) + amountByDay, 8)
     }
+  }
+
+  const seenIds = new Set<string>()
+  for (const row of parsed?.data ?? []) {
+    if (_.toSafeInteger(row.side) !== 1) continue
+    const id = row.id ?? ''
+    if (id !== '' && seenIds.has(id)) continue // funding-export-credits-1 的 CSV 偶有分頁重疊造成的重複列
+    seenIds.add(id)
+    addSpan(
+      _.toFinite(row.amount),
+      dayjs.utc(row.openedAt, 'YYYY-MM-DD HH:mm:ss', true),
+      dayjs.utc(row.closedAt, 'YYYY-MM-DD HH:mm:ss', true),
+    )
+  }
+
+  const now = dayjs.utc()
+  for (const credit of activeCredits) {
+    if (credit.side !== 1) continue
+    addSpan(_.toFinite(credit.amount), dayjs.utc(credit.mtsOpening), now)
   }
 
   return results
