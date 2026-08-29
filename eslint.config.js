@@ -60,4 +60,13 @@ export default [
       ],
     },
   },
+
+  // 測試檔：放寬 mock／assert 會用到、但產品碼不該出現的規則
+  {
+    files: ['**/*.test.ts', 'test/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-non-null-assertion': 0,
+      '@typescript-eslint/no-extraneous-class': 0,
+    },
+  },
 ]

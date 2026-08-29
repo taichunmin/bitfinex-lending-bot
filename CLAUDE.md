@@ -16,7 +16,9 @@ Bitfinex 融資（放貸）自動化機器人。核心是 `bin/` 底下多支獨
 
 - `yarn` — 安裝依賴（專案用 yarn，CI 也是）
 - `yarn lint` — ESLint 檢查並自動修正（CI 會跑，未過會失敗）
-- `yarn test` — Jest（目前尚無測試檔）
+- `yarn test` — Vitest（`vitest run`）；`yarn test:watch` 開 watch 模式
+  - 測試檔與原始碼並排放（`bin/*.test.ts`），外部相依（`@taichunmin/bitfinex`、`telegram`）一律 `vi.mock`，不碰真實 API／金鑰
+  - 純邏輯（`calcTargetRate`、`rateToPeriod`、zod schema）用手刻 fixture；`bin/__fixtures__/` 放真實 K 線快照當 regression anchor
 - `yarn repl` — 開啟預載 Bitfinex client 的 Node REPL，用來手動打 API
 - `yarn tsx ./bin/<script>.ts` — 直接執行單一腳本（不需編譯；每支檔案開頭註解有所需環境變數）
 
@@ -27,7 +29,7 @@ Bitfinex 融資（放貸）自動化機器人。核心是 `bin/` 底下多支獨
 - **匯入順序**：任何檔案都要先 `import '@/lib/dotenv'`（或間接引入 `getenv`）再引其他模組，確保環境變數先載入。`@/*` 路徑別名對應專案根目錄。
 - **狀態持久化**：跨執行的狀態（例如已發送的 Telegram 訊息 id）存在 Bitfinex 帳號的 user settings，key 為 `api:taichunmin_<檔名>`，非本地檔案。
 - **兩套 Bitfinex client**：新腳本用 `@taichunmin/bitfinex`（`Bitfinex` class）；`lib/bitfinex.ts` 是包在舊版 `bitfinex-api-node` 上的薄層，逐步淘汰中。
-- **funding-auto-renew-N**：自動放貸機器人，`-1`/`-2`/`-3` 是同一支機器人的演進版本，數字越大越新；目前實際使用 `-3`（見 CI），`-1`/`-2` 只是舊計算方式的備份，不再執行。`-2`/`-3` 的利率邏輯：抓過去一天的 1 分鐘 K 線，加總成交量，用二分搜尋找出成交量落在目標分位（`rank`）的利率，再用 `rateMin`/`rateMax` 夾住，最後依 `period` 對照表換算出借天數。
+- **funding-auto-renew-N**：自動放貸機器人，`-1`/`-2`/`-3` 是同一支機器人的演進版本，數字越大越新；目前實際使用 `-3`（見 CI），`-1`/`-2` 只是舊計算方式的備份，不再執行。`-2`/`-3` 的利率邏輯：抓過去一天的 1 分鐘 K 線，加總成交量，用二分搜尋找出成交量落在目標分位（`rank`）的利率，再用 `rateMin`/`rateMax` 夾住，最後依 `period` 對照表換算出借天數。`-3` 的利率計算已抽成 `calcTargetRate()`（純函式，無 candle 回 `null`），`rateToPeriod()` 的邊界行為（利率低於全部門檻→2、高於全部→表中最大 key、`period` 表為空→2）是刻意的流動性考量，見 `bin/funding-auto-renew-3.test.ts`。
 - **funding-statistics-1**：計算放貸收益（1／7／30／365 日年化）與資金利用率（`lentRatio*`），結果傳 Telegram，並把 CSV 輸出到 `dist/` 部署上 GitHub Pages，供 Looker Studio（前 Data Studio）讀取做報表：<https://datastudio.google.com/reporting/500aadf5-8d0d-4cba-a1ce-7275c7e5b21e>。利用率的計算口徑見 `.claude/docs/adr/0001-lent-ratio-calculation.md`：時間加權、含進行中的出借、視窗較年化往前一天。
 - **lib/**：`logger` 產生以 `debug` 為底、輸出 YAML 的 logger 群組並會遮蔽敏感欄位；`helper` 是數字／日期／百分比格式化；`telegram` 走 Bot API 發送與編輯訊息；`gcs`／`github-gist` 為選用的匯出目標。
 
@@ -35,7 +37,8 @@ Bitfinex 融資（放貸）自動化機器人。核心是 `bin/` 底下多支獨
 
 - `taichunmin-funding-auto-renew-3.yml` — 每 10 分鐘跑 `funding-auto-renew-3.ts`，調整出借利率。
 - `gh-pages.yml` — 定時執行 `funding-export-credits-1.ts` 與 `funding-statistics-1.ts`，產出 `dist/` 後部署到 GitHub Pages。
-- 兩者都有 `if: github.repository_owner == 'taichunmin'`，fork 後需改成自己的帳號。
+- `test.yml` — push／PR 到 master 時跑 `yarn lint` + `yarn test`，與掛單 workflow 完全獨立、不帶 secrets（測試全 mock 外部相依），測試壞掉不會影響實際出借。
+- 前三者都有 `if: github.repository_owner == 'taichunmin'`，fork 後需改成自己的帳號。
 
 ## Agent skills
 

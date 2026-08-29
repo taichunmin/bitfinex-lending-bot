@@ -56,9 +56,9 @@ const ZodConfigCurrency = z.object({
   period: ZodConfigPeriod,
 })
 
-const ZodConfig = z.record(z.string(), ZodConfigCurrency).default({})
+export const ZodConfig = z.record(z.string(), ZodConfigCurrency).default({})
 
-const ZodDb = z.object({
+export const ZodDb = z.object({
   schema: z.literal(1), // 用來辨識資料結構版本，方便未來升級
   notified: z.record(
     z.string(),
@@ -130,74 +130,9 @@ export async function main (): Promise<void> {
           timeframe: '1m',
         })
 
-        // ranges
-        const ranges = _.chain(candles)
-          .map(({ open, close, high, low, volume }) => _.map([
-              _.min([open, close, high, low]), // min * 1e8
-              _.max([open, close, high, low]), // high * 1e8
-              volume, // volume * 1e8
-            ], (num: number) => BigInt(_.round(num * 1e8))))
-          .filter(([low, high, volume]) => volume > 0n)
-          .sortBy([0, 1, 2])
-          .value()
-        // sum duplicate ranges
-        for (let i = 1; i < ranges.length; i++) {
-          const [low, high, volume] = ranges[i]
-          if (low !== ranges[i - 1][0] || high !== ranges[i - 1][1]) continue
-          ranges[i - 1][2] += volume
-          ranges.splice(i, 1)
-          i--
-        }
-        // console.log(`ranges.length = ${ranges.length}, ranges: ${JSON.stringify(_.take(ranges, 10))}`)
-        if (ranges.length === 0) throw new SkipError('Skip to change autoRenew because no candles.')
-
-        // for lowest rate and highest rate
-        let [lowestRate, highestRate, totalVolume] = [ranges[0][0], ranges[0][1], 0n]
-        for (const [low, high, volume] of ranges) {
-          if (high > highestRate) highestRate = high
-          if (low < lowestRate) lowestRate = low
-          totalVolume += volume
-        }
-        // console.log(`lowestRate = ${lowestRate}, highestRate = ${highestRate}, totalVolume = ${totalVolume}`)
-
-        // binary search target rate by rank
-        const ctxBs: Record<string, any> = {
-          rank: BigInt(_.round(cfg1.rank * 1e8)),
-          cnt: 0n,
-          start: lowestRate,
-          end: highestRate,
-        }
-        // console.log(`ctxBs: ${JSON.stringify(ctxBs)}`)
-        while (ctxBs.start <= ctxBs.end) {
-          ctxBs.mid = (ctxBs.start + ctxBs.end) / 2n
-
-          // calculate volume for mid
-          ctxBs.midVol = 0n
-          for (const [low, high, volume] of ranges) {
-            if (ctxBs.mid < low) break // because ranges is sorted
-            ctxBs.midVol += ctxBs.mid >= high ? volume : (volume * (ctxBs.mid - low + 1n) / (high - low + 1n))
-          }
-          ctxBs.midRank = ctxBs.midVol * BigInt(1e8) / totalVolume
-
-          // save target rate
-          const targetRankDiff = bigintAbs((ctxBs.midRank - ctxBs.rank) as any)
-          if (_.isNil(ctxBs.targetRate)) {
-            ctxBs.targetRate = ctxBs.mid
-            ctxBs.targetRankDiff = targetRankDiff
-          } else if (targetRankDiff < ctxBs.targetRankDiff) {
-            ctxBs.targetRate = ctxBs.mid
-            ctxBs.targetRankDiff = targetRankDiff
-          }
-
-          if (ctxBs.midRank === ctxBs.rank) break // found
-          if (ctxBs.rank < ctxBs.midRank) ctxBs.end = ctxBs.mid - 1n
-          else ctxBs.start = ctxBs.mid + 1n
-          ctxBs.cnt++
-          // console.log(`ctxBs: ${JSON.stringify(ctxBs)}`)
-        }
-
         // target
-        const targetRate = _.clamp(Number(ctxBs.targetRate) / 1e8, cfg1.rateMin, cfg1.rateMax)
+        const targetRate = calcTargetRate(candles, _.pick(cfg1, ['rank', 'rateMin', 'rateMax']))
+        if (_.isNil(targetRate)) throw new SkipError('Skip to change autoRenew because no candles.')
         const newAutoRenew = trace.newAutoRenew = {
           amount: cfg1.amount,
           currency,
@@ -295,6 +230,84 @@ export async function main (): Promise<void> {
 
   ymlDump('newDb', db)
   await bitfinex.v2AuthWriteSettingsSet({ [DB_KEY]: ZodDb.parse(db) as any })
+}
+
+interface RateCandle {
+  open: number
+  close: number
+  high: number
+  low: number
+  volume: number
+}
+
+/**
+ * 依過去一天的 K 線成交量分布，用二分搜尋找出成交量累積比例最接近 `rank` 分位的利率，
+ * 再用 `rateMin`／`rateMax` 夾住。當沒有任何有成交量的 K 線時回傳 `null`。
+ */
+export function calcTargetRate (candles: RateCandle[], opts: { rank: number, rateMin: number, rateMax: number }): number | null {
+  // ranges: 每根 K 線換算成 [利率下界, 利率上界, 成交量]（皆 * 1e8 後轉 BigInt），依序排序
+  const ranges = _.chain(candles)
+    .map(({ open, close, high, low, volume }) => _.map([
+        _.min([open, close, high, low]), // min * 1e8
+        _.max([open, close, high, low]), // high * 1e8
+        volume, // volume * 1e8
+      ], (num: number) => BigInt(_.round(num * 1e8))))
+    .filter(([low, high, volume]) => volume > 0n)
+    .sortBy([0, 1, 2])
+    .value()
+  // sum duplicate ranges
+  for (let i = 1; i < ranges.length; i++) {
+    const [low, high, volume] = ranges[i]
+    if (low !== ranges[i - 1][0] || high !== ranges[i - 1][1]) continue
+    ranges[i - 1][2] += volume
+    ranges.splice(i, 1)
+    i--
+  }
+  if (ranges.length === 0) return null
+
+  // for lowest rate and highest rate
+  let [lowestRate, highestRate, totalVolume] = [ranges[0][0], ranges[0][1], 0n]
+  for (const [low, high, volume] of ranges) {
+    if (high > highestRate) highestRate = high
+    if (low < lowestRate) lowestRate = low
+    totalVolume += volume
+  }
+
+  // binary search target rate by rank
+  const ctxBs: Record<string, any> = {
+    rank: BigInt(_.round(opts.rank * 1e8)),
+    cnt: 0n,
+    start: lowestRate,
+    end: highestRate,
+  }
+  while (ctxBs.start <= ctxBs.end) {
+    ctxBs.mid = (ctxBs.start + ctxBs.end) / 2n
+
+    // calculate volume for mid
+    ctxBs.midVol = 0n
+    for (const [low, high, volume] of ranges) {
+      if (ctxBs.mid < low) break // because ranges is sorted
+      ctxBs.midVol += ctxBs.mid >= high ? volume : (volume * (ctxBs.mid - low + 1n) / (high - low + 1n))
+    }
+    ctxBs.midRank = ctxBs.midVol * BigInt(1e8) / totalVolume
+
+    // save target rate
+    const targetRankDiff = bigintAbs((ctxBs.midRank - ctxBs.rank) as any)
+    if (_.isNil(ctxBs.targetRate)) {
+      ctxBs.targetRate = ctxBs.mid
+      ctxBs.targetRankDiff = targetRankDiff
+    } else if (targetRankDiff < ctxBs.targetRankDiff) {
+      ctxBs.targetRate = ctxBs.mid
+      ctxBs.targetRankDiff = targetRankDiff
+    }
+
+    if (ctxBs.midRank === ctxBs.rank) break // found
+    if (ctxBs.rank < ctxBs.midRank) ctxBs.end = ctxBs.mid - 1n
+    else ctxBs.start = ctxBs.mid + 1n
+    ctxBs.cnt++
+  }
+
+  return _.clamp(Number(ctxBs.targetRate) / 1e8, opts.rateMin, opts.rateMax)
 }
 
 export function rateToPeriod (periodMap: z.output<typeof ZodConfigPeriod>, rateTarget: number): number {

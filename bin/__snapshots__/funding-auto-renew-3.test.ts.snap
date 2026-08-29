@@ -1,0 +1,9 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`calcTargetRate > 對真實 K 線 fixture 的輸出（regression anchor） 1`] = `
+{
+  "0.1": 0.00012814,
+  "0.5": 0.00022628,
+  "0.9": 0.00027755,
+}
+`;
